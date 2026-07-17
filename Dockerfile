@@ -15,6 +15,7 @@ WORKDIR /app
 
 # Install Python dependencies first for better layer caching.
 COPY requirements.txt .
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Always pull the newest yt-dlp on (re)build. The build arg below busts the
