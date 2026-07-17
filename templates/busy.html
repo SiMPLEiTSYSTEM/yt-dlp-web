@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Busy · YT-DLP Downloader{% endblock %}
+
+{% block content %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-8 text-center">
+    <div class="mx-auto mb-5 h-14 w-14 rounded-full border-4 border-amber-500/30 border-t-amber-500 animate-spin"></div>
+
+    <h2 class="text-2xl font-semibold mb-2">Downloader is busy</h2>
+    <p class="text-slate-400 text-sm mb-6">
+        A download is currently in progress. Please wait and try again shortly.
+        This tool handles one download at a time.
+    </p>
+
+    <div class="mb-6 text-xs text-slate-500">
+        This page checks automatically. It will unlock as soon as the current
+        download finishes.
+    </div>
+
+    <a
+        id="try-again"
+        href="{{ url_for('index') }}"
+        class="inline-block rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-500"
+    >
+        Try Again
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Poll status every 3 seconds; when idle/finished/error, go back to the
+    // input page automatically. Also hard-refresh every 4 seconds as a
+    // simple fallback.
+    async function checkStatus() {
+        try {
+            const res = await fetch("{{ url_for('api_status') }}", { cache: "no-store" });
+            const data = await res.json();
+            if (data.status !== "downloading") {
+                window.location.href = "{{ url_for('index') }}";
+            }
+        } catch (e) {
+            /* ignore transient errors */
+        }
+    }
+
+    setInterval(checkStatus, 3000);
+
+    // Fallback auto-refresh every 4 seconds.
+    setTimeout(function () {
+        window.location.reload();
+    }, 4000);
+</script>
+{% endblock %}

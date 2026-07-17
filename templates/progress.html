@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Downloading · YT-DLP Downloader{% endblock %}
+
+{% block content %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-8">
+    <h2 class="text-2xl font-semibold mb-1">Downloading…</h2>
+    <p id="video-title" class="text-slate-400 text-sm mb-6 truncate">
+        {{ title or "Fetching video information…" }}
+    </p>
+
+    <div class="mb-2 flex items-center justify-between text-sm">
+        <span class="font-medium text-slate-300">Progress</span>
+        <span id="percent" class="font-mono text-indigo-300">0%</span>
+    </div>
+
+    <div class="h-4 w-full overflow-hidden rounded-full bg-slate-800">
+        <div
+            id="bar"
+            class="progress-striped h-full rounded-full bg-indigo-600 transition-all duration-300 ease-out"
+            style="width: 0%;"
+        ></div>
+    </div>
+
+    <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
+        <div class="rounded-lg bg-slate-800/60 px-4 py-3">
+            <div class="text-slate-500">Speed</div>
+            <div id="speed" class="font-mono text-slate-200">—</div>
+        </div>
+        <div class="rounded-lg bg-slate-800/60 px-4 py-3">
+            <div class="text-slate-500">ETA</div>
+            <div id="eta" class="font-mono text-slate-200">—</div>
+        </div>
+    </div>
+
+    <div id="error-box" class="mt-6 hidden rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const bar = document.getElementById("bar");
+    const percentEl = document.getElementById("percent");
+    const speedEl = document.getElementById("speed");
+    const etaEl = document.getElementById("eta");
+    const titleEl = document.getElementById("video-title");
+    const errorBox = document.getElementById("error-box");
+
+    const source = new EventSource("{{ url_for('progress_stream') }}");
+
+    source.onmessage = function (event) {
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (e) {
+            return;
+        }
+
+        if (data.title) {
+            titleEl.textContent = data.title;
+        }
+
+        const pct = Math.max(0, Math.min(100, Number(data.progress) || 0));
+        bar.style.width = pct + "%";
+        percentEl.textContent = pct.toFixed(1) + "%";
+        speedEl.textContent = data.speed || "—";
+        etaEl.textContent = data.eta || "—";
+
+        if (data.status === "finished") {
+            source.close();
+            bar.classList.remove("progress-striped");
+            window.location.href = "{{ url_for('download') }}";
+        } else if (data.status === "error") {
+            source.close();
+            bar.classList.remove("progress-striped");
+            bar.classList.remove("bg-indigo-600");
+            bar.classList.add("bg-red-600");
+            errorBox.textContent = data.error || "Download failed.";
+            errorBox.classList.remove("hidden");
+        } else if (data.status === "idle") {
+            source.close();
+            window.location.href = "{{ url_for('index') }}";
+        }
+    };
+
+    source.onerror = function () {
+        // If the stream drops, fall back to polling the status endpoint.
+        source.close();
+        const poll = setInterval(async function () {
+            try {
+                const res = await fetch("{{ url_for('api_status') }}", { cache: "no-store" });
+                const data = await res.json();
+                if (data.status === "finished") {
+                    clearInterval(poll);
+                    window.location.href = "{{ url_for('download') }}";
+                } else if (data.status === "idle") {
+                    clearInterval(poll);
+                    window.location.href = "{{ url_for('index') }}";
+                } else if (data.status === "error") {
+                    clearInterval(poll);
+                    errorBox.textContent = data.error || "Download failed.";
+                    errorBox.classList.remove("hidden");
+                }
+            } catch (e) {
+                /* keep polling */
+            }
+        }, 1500);
+    };
+</script>
+{% endblock %}

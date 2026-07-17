@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Setup · Upload cookies{% endblock %}
+
+{% block content %}
+<div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-8">
+    <h2 class="text-2xl font-semibold mb-1">Upload YouTube cookies</h2>
+    <p class="text-slate-400 text-sm mb-6">
+        A <code class="text-slate-300">cookies.txt</code> file is required before you can
+        download. It lets the downloader authenticate with YouTube so full-quality
+        (up to 1080p) formats are available.
+    </p>
+
+    {% if error %}
+    <div class="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if have_cookies %}
+    <div class="mb-5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+        A cookies file is already loaded. Uploading a new one will replace it.
+    </div>
+    {% endif %}
+
+    <form action="{{ url_for('setup_upload') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+        <div>
+            <label for="cookies" class="block text-sm font-medium text-slate-300 mb-2">
+                cookies.txt file
+            </label>
+            <input
+                id="cookies"
+                name="cookies"
+                type="file"
+                accept=".txt,text/plain"
+                required
+                class="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-indigo-500 cursor-pointer rounded-lg border border-slate-700 bg-slate-800 p-2"
+            />
+        </div>
+        <button
+            type="submit"
+            class="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        >
+            Upload &amp; Continue
+        </button>
+    </form>
+
+    {% if have_cookies %}
+    <div class="mt-4 text-center">
+        <a href="{{ url_for('index') }}" class="text-sm text-slate-400 hover:text-slate-200">← Back to downloader</a>
+    </div>
+    {% endif %}
+
+    <div class="mt-8 border-t border-slate-800 pt-6">
+        <h3 class="text-sm font-semibold text-slate-300 mb-2">How to get cookies.txt</h3>
+        <ol class="list-decimal list-inside space-y-1 text-xs text-slate-400">
+            <li>Install a browser extension such as <span class="text-slate-300">“Get cookies.txt LOCALLY”</span> (Chrome/Firefox).</li>
+            <li>Log in to <span class="text-slate-300">youtube.com</span> in that browser.</li>
+            <li>Open the extension while on YouTube and export/download <code class="text-slate-300">cookies.txt</code>.</li>
+            <li>Upload that file here.</li>
+        </ol>
+        <p class="mt-3 text-xs text-slate-500">
+            Tip: use a private/incognito window logged into a throwaway account, export the
+            cookies, then close the window so the session stays valid for the server.
+        </p>
+    </div>
+</div>
+{% endblock %}

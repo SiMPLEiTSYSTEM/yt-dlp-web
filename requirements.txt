@@ -1,0 +1,8 @@
+flask==3.0.3
+gunicorn==23.0.0
+# yt-dlp is intentionally NOT pinned. YouTube changes its internals
+# frequently and breaks older yt-dlp releases (causing errors like
+# "Requested format is not available"). Leaving it unpinned means every
+# `docker compose build` fetches the newest release. Rebuild periodically
+# to stay current: `docker compose up -d --build`.
+yt-dlp

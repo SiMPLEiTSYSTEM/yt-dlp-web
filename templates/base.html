@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}YT-DLP Downloader{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Animated striped progress bar */
+        @keyframes progress-stripes {
+            from { background-position: 1rem 0; }
+            to   { background-position: 0 0; }
+        }
+        .progress-striped {
+            background-image: linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.15) 25%,
+                transparent 25%,
+                transparent 50%,
+                rgba(255, 255, 255, 0.15) 50%,
+                rgba(255, 255, 255, 0.15) 75%,
+                transparent 75%,
+                transparent
+            );
+            background-size: 1rem 1rem;
+            animation: progress-stripes 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="h-full bg-slate-950 text-slate-100 antialiased">
+    <div class="min-h-full flex flex-col">
+        <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
+            <div class="max-w-3xl mx-auto px-6 py-5 flex items-center gap-3">
+                <div class="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white">▶</div>
+                <h1 class="text-xl font-semibold tracking-tight">YT-DLP Downloader</h1>
+            </div>
+        </header>
+
+        <main class="flex-1 flex items-center justify-center px-6 py-12">
+            <div class="w-full max-w-xl">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+
+        <footer class="border-t border-slate-800 py-4">
+            <p class="text-center text-xs text-slate-500">
+                Best quality up to 1080p · merged to MP4 · one download at a time
+            </p>
+        </footer>
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
