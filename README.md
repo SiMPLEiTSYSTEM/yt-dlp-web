@@ -42,44 +42,22 @@ cd yt-dlp-web
 Create `docker-compose.yml` with the configuration below. It pulls the published image and exposes the web UI on port `8080`.
 
 ```yaml
-# ---------------------------------------------------------------------------
-# YT-DLP Downloader — docker-compose
-#
-# Usage:
-# 1. Build and start: docker compose up -d
-# 2. Open in a browser: http://<host-ip>:8080
-#
-# The app runs one download at a time. Downloaded files live only
-# temporarily inside the container (/tmp/ytdlp_downloads) and are removed
-# when the user clicks "Start Over".
-#
-# COOKIES ARE REQUIRED. On first launch the web UI shows an upload page —
-# just upload a YouTube cookies.txt (Netscape format) through the browser.
-# It is stored in the "ytdlp_config" volume below and persists across
-# restarts, so you only do this once (until the cookies expire).
-# ---------------------------------------------------------------------------
-
 services:
   yt-dlp-web:
     image: ghcr.io/simpleitsystem/yt-dlp-web
     container_name: yt-dlp-web
     ports:
-      # host 8080 -> container 5000
       - "8080:5000"
     restart: unless-stopped
     volumes:
-      # Temporary download directory (files deleted on "Start Over").
       - ./ytdlp_downloads:/tmp/ytdlp_downloads
-
-      # Persistent config volume that holds the uploaded cookies.txt.
-      # Must be writable (do NOT add :ro) so the upload page can save it.
       - ./ytdlp_config:/config
 ```
 
 ### 3. Start the service
 
 ```bash
-docker compose up -d
+docker-compose up -d
 ```
 
 Then open:
@@ -107,47 +85,6 @@ The application makes a temporary writable copy of this file during each downloa
 ## Cookie notes
 
 The cookies file is mandatory because it authenticates yt-dlp with YouTube and allows access to the available high-resolution formats. Cookies expire eventually, so re-upload a fresh `cookies.txt` if downloads start failing after the service has been working normally.
-
-Treat this file like a credential:
-
-- Keep `ytdlp_config/cookies.txt` private.
-- Do **not** commit it to Git.
-- Do not expose this service directly to the public internet without adding your own access controls.
-- Use an account whose cookies you are comfortable storing on the Docker host.
-
-A useful `.gitignore` entry if you keep the Compose setup in a Git repository:
-
-```gitignore
-ytdlp_config/
-ytdlp_downloads/
-```
-
-## Managing the container
-
-View logs:
-
-```bash
-docker compose logs -f
-```
-
-Stop the service:
-
-```bash
-docker compose down
-```
-
-Start it again:
-
-```bash
-docker compose up -d
-```
-
-Update to the latest published image:
-
-```bash
-docker compose pull
-docker compose up -d
-```
 
 ## Build from source
 
