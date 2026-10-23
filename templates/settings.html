@@ -15,16 +15,17 @@
         {% endif %}
 
         <!-- Auth status -->
-        <div class="rounded-lg bg-slate-800/60 px-4 py-4 mb-6">
+        <div class="rounded-lg bg-slate-800/60 px-4 py-4 mb-4">
             <div class="text-sm text-slate-400 mb-1">Authentication status</div>
-            {% if has_token %}
+            {% if authorized %}
             <div class="flex items-center gap-2 text-emerald-400 font-medium">
-                <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span> Authorized via OAuth2
+                <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span> Authorized
             </div>
-            {% elif has_cookies %}
-            <div class="flex items-center gap-2 text-amber-400 font-medium">
-                <span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span> Authorized via cookies.txt (fallback)
+            {% if cookie_age_days is not none %}
+            <div class="mt-1 text-xs text-slate-500">
+                cookies.txt uploaded {{ cookie_age_days }} day{{ '' if cookie_age_days == 1 else 's' }} ago
             </div>
+            {% endif %}
             {% else %}
             <div class="flex items-center gap-2 text-red-400 font-medium">
                 <span class="h-2.5 w-2.5 rounded-full bg-red-400"></span> Not authorized
@@ -32,44 +33,83 @@
             {% endif %}
         </div>
 
-        <!-- Re-authorize -->
-        <form action="{{ url_for('settings_reauth') }}" method="post" class="mb-6">
-            <button type="submit" class="w-full rounded-lg brand-btn px-4 py-3 font-semibold text-white transition">
-                Re-authorize YouTube
-            </button>
-            <p class="mt-2 text-xs text-slate-500">
-                Deletes the stored OAuth token and restarts the authorization flow.
-                Use this if downloads start failing with sign-in errors.
-            </p>
-        </form>
+        <!-- Expiry warning -->
+        {% if cookie_warning %}
+        <div class="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            Your cookies are {{ cookie_age_days }} days old — YouTube cookies typically
+            expire after 2–4 weeks. Upload fresh cookies to keep downloads working.
+        </div>
+        {% endif %}
 
-        <!-- Cookies fallback (advanced) -->
-        <details class="rounded-lg border border-slate-800 bg-slate-800/40 px-4 py-3">
-            <summary class="cursor-pointer text-sm font-medium text-slate-300">
-                Advanced: upload cookies.txt as a fallback
-            </summary>
-            <div class="mt-4">
-                <p class="text-xs text-slate-500 mb-3">
-                    If OAuth2 doesn't work for you, you can upload a Netscape-format
-                    <code>cookies.txt</code> exported from your browser. This is used
-                    only if no OAuth token is present.
-                </p>
-                <form action="{{ url_for('settings_cookies') }}" method="post" enctype="multipart/form-data" class="space-y-3">
-                    <input type="file" name="cookies" accept=".txt"
-                           class="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-slate-100" />
-                    <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-600">
-                        Upload cookies.txt
-                    </button>
-                </form>
-                {% if has_cookies %}
-                <p class="mt-3 text-xs text-emerald-400">A cookies.txt file is currently stored.</p>
-                {% endif %}
-            </div>
-        </details>
+        <!-- Update cookies -->
+        <div class="rounded-lg border border-slate-800 bg-slate-800/40 px-5 py-5 mb-5">
+            <h3 class="text-lg font-semibold mb-1">Update Cookies</h3>
+            <p class="text-xs text-slate-500 mb-4">
+                Export a fresh <code class="text-slate-400">cookies.txt</code> from YouTube.com
+                (using the <em>Get cookies.txt PLUS</em> extension) and upload it here.
+            </p>
+            <form action="{{ url_for('settings_cookies') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+                <div id="dropzone"
+                     class="rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/40 px-6 py-6 text-center cursor-pointer transition">
+                    <svg class="mx-auto h-8 w-8 text-slate-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    <p class="text-sm text-slate-300"><span class="brand-text font-medium">Click to browse</span> or drag &amp; drop</p>
+                    <p id="file-name" class="mt-1 text-xs text-slate-500">cookies.txt</p>
+                    <input id="cookies-input" name="cookies" type="file" accept=".txt" class="hidden" required />
+                </div>
+                <button type="submit" class="w-full rounded-lg brand-btn px-4 py-3 font-semibold text-white transition">
+                    Upload New Cookies
+                </button>
+            </form>
+        </div>
+
+        <!-- Remove & re-setup -->
+        <form action="{{ url_for('settings_reauth') }}" method="post" class="text-center">
+            <button type="submit"
+                    class="text-sm text-slate-400 underline-offset-4 transition hover:text-red-300 hover:underline">
+                Remove cookies &amp; start setup over
+            </button>
+        </form>
     </div>
 
     <div class="text-center">
         <a href="{{ url_for('health') }}" class="text-sm brand-text hover:underline">View diagnostics / health page →</a>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const dropzone = document.getElementById("dropzone");
+    const input = document.getElementById("cookies-input");
+    const fileName = document.getElementById("file-name");
+
+    if (dropzone && input) {
+        dropzone.addEventListener("click", () => input.click());
+        input.addEventListener("change", () => {
+            if (input.files.length) fileName.textContent = input.files[0].name;
+        });
+        ["dragenter", "dragover"].forEach(evt =>
+            dropzone.addEventListener(evt, e => {
+                e.preventDefault();
+                dropzone.classList.add("brand-border");
+                dropzone.classList.remove("border-slate-700");
+            })
+        );
+        ["dragleave", "drop"].forEach(evt =>
+            dropzone.addEventListener(evt, e => {
+                e.preventDefault();
+                dropzone.classList.remove("brand-border");
+                dropzone.classList.add("border-slate-700");
+            })
+        );
+        dropzone.addEventListener("drop", e => {
+            if (e.dataTransfer.files.length) {
+                input.files = e.dataTransfer.files;
+                fileName.textContent = e.dataTransfer.files[0].name;
+            }
+        });
+    }
+</script>
 {% endblock %}

@@ -1,130 +1,102 @@
 {% extends "base.html" %}
 
-{% block title %}Authorize · {{ brand.name }}{% endblock %}
+{% block title %}Connect to YouTube · {{ brand.name }}{% endblock %}
 
 {% block content %}
-<div class="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl p-8 text-center">
+<div class="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl p-8">
+    <h2 class="text-2xl font-semibold mb-2">Connect to YouTube</h2>
+    <p class="text-slate-400 text-sm mb-6">
+        YouTube requires proof that you're signed in before it will hand over
+        videos. You provide that by uploading your browser's
+        <code class="text-slate-300">cookies.txt</code> — a quick, one-time export.
+    </p>
 
-    <!-- Initial state -->
-    <div id="step-start">
-        <div class="mx-auto mb-5 h-14 w-14 rounded-full brand-bg flex items-center justify-center text-2xl text-white">▶</div>
-        <h2 class="text-2xl font-semibold mb-2">Authorize with YouTube</h2>
-        <p class="text-slate-400 text-sm mb-6">
-            This app uses YouTube OAuth2 to download videos reliably — no browser
-            extension needed. You only need to do this once; the token refreshes
-            automatically.
-        </p>
-        <button
-            id="authorize-btn"
-            class="inline-block rounded-lg brand-btn px-6 py-3 font-semibold text-white transition"
-        >
-            Authorize with YouTube
-        </button>
+    {% if error %}
+    <div class="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        {{ error }}
     </div>
+    {% endif %}
 
-    <!-- Waiting / code state -->
-    <div id="step-code" class="hidden">
-        <h2 class="text-2xl font-semibold mb-2">Complete authorization</h2>
-        <p class="text-slate-400 text-sm mb-6">
-            On any device, open the link below and enter this code:
-        </p>
+    <ol class="mb-6 space-y-3 text-sm text-slate-300">
+        <li class="flex gap-3">
+            <span class="flex-none h-6 w-6 rounded-full brand-bg text-white text-xs font-bold flex items-center justify-center">1</span>
+            <span>
+                Install the
+                <a href="https://chromewebstore.google.com/detail/get-cookiestxt-plus/cclelndahbckbenkjhflpdbgdldlbecc"
+                   target="_blank" rel="noopener" class="brand-text hover:underline font-medium">Get cookies.txt PLUS</a>
+                browser extension (available for Chrome &amp; Firefox).
+            </span>
+        </li>
+        <li class="flex gap-3">
+            <span class="flex-none h-6 w-6 rounded-full brand-bg text-white text-xs font-bold flex items-center justify-center">2</span>
+            <span>Make sure you're logged in to <strong>YouTube.com</strong> in that browser.</span>
+        </li>
+        <li class="flex gap-3">
+            <span class="flex-none h-6 w-6 rounded-full brand-bg text-white text-xs font-bold flex items-center justify-center">3</span>
+            <span>On YouTube.com, click the extension icon and <strong>Export</strong> a <code class="text-slate-400">cookies.txt</code> file.</span>
+        </li>
+        <li class="flex gap-3">
+            <span class="flex-none h-6 w-6 rounded-full brand-bg text-white text-xs font-bold flex items-center justify-center">4</span>
+            <span>Upload it below.</span>
+        </li>
+    </ol>
 
-        <a id="verify-url" href="#" target="_blank" rel="noopener"
-           class="inline-block mb-5 rounded-lg brand-btn px-6 py-3 font-semibold text-white transition">
-            Open google.com/device
-        </a>
-
-        <div class="mb-6">
-            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Your code</div>
-            <div id="user-code" class="font-mono text-3xl font-bold brand-text tracking-widest">—</div>
-        </div>
-
-        <div class="flex items-center justify-center gap-3 text-slate-400 text-sm">
-            <div class="h-5 w-5 rounded-full border-2 border-slate-600 brand-border border-t-transparent animate-spin"></div>
-            Waiting for you to complete authorization on YouTube…
-        </div>
-    </div>
-
-    <!-- Spinner (before code arrives) -->
-    <div id="step-loading" class="hidden">
-        <div class="mx-auto mb-5 h-14 w-14 rounded-full border-4 border-slate-700 brand-border border-t-transparent animate-spin"></div>
-        <h2 class="text-xl font-semibold mb-2">Starting authorization…</h2>
-        <p class="text-slate-400 text-sm">Requesting a device code from YouTube.</p>
-    </div>
-
-    <!-- Success -->
-    <div id="step-success" class="hidden">
-        <div class="mx-auto mb-5 h-14 w-14 rounded-full bg-emerald-500/15 flex items-center justify-center">
-            <svg class="h-7 w-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+    <form id="cookie-form" action="{{ url_for('setup_upload') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+        <div id="dropzone"
+             class="rounded-xl border-2 border-dashed border-slate-700 bg-slate-800/40 px-6 py-8 text-center cursor-pointer transition">
+            <svg class="mx-auto h-10 w-10 text-slate-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
+            <p class="text-sm text-slate-300"><span class="brand-text font-medium">Click to browse</span> or drag &amp; drop</p>
+            <p id="file-name" class="mt-2 text-xs text-slate-500">cookies.txt</p>
+            <input id="cookies-input" name="cookies" type="file" accept=".txt" class="hidden" required />
         </div>
-        <h2 class="text-2xl font-semibold mb-1">Authorized!</h2>
-        <p class="text-slate-400 text-sm">Redirecting…</p>
-    </div>
 
-    <!-- Error -->
-    <div id="step-error" class="hidden">
-        <div class="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300" id="error-msg"></div>
-        <button id="retry-btn" class="rounded-lg brand-btn px-6 py-3 font-semibold text-white transition">
-            Try Again
+        <button type="submit"
+                class="w-full rounded-lg brand-btn px-4 py-3 font-semibold text-white transition">
+            Upload &amp; Continue
         </button>
-        <p class="mt-4 text-xs text-slate-500">
-            Having trouble? You can upload a cookies.txt file as a fallback in
-            <a href="{{ url_for('settings') }}" class="brand-text hover:underline">Settings</a>.
-        </p>
-    </div>
+    </form>
+
+    <p class="mt-6 text-xs text-slate-500">
+        Cookies expire after 2–4 weeks. When downloads stop working, visit
+        <a href="{{ url_for('settings') }}" class="brand-text hover:underline">Settings</a>
+        to upload fresh ones.
+    </p>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    const stepStart = document.getElementById("step-start");
-    const stepLoading = document.getElementById("step-loading");
-    const stepCode = document.getElementById("step-code");
-    const stepSuccess = document.getElementById("step-success");
-    const stepError = document.getElementById("step-error");
-    const verifyUrl = document.getElementById("verify-url");
-    const userCode = document.getElementById("user-code");
-    const errorMsg = document.getElementById("error-msg");
+    const dropzone = document.getElementById("dropzone");
+    const input = document.getElementById("cookies-input");
+    const fileName = document.getElementById("file-name");
 
-    function show(el) {
-        [stepStart, stepLoading, stepCode, stepSuccess, stepError].forEach(s => s.classList.add("hidden"));
-        el.classList.remove("hidden");
-    }
+    dropzone.addEventListener("click", () => input.click());
 
-    let source = null;
+    input.addEventListener("change", () => {
+        if (input.files.length) fileName.textContent = input.files[0].name;
+    });
 
-    function startAuth() {
-        show(stepLoading);
-        fetch("{{ url_for('setup_authorize') }}", { method: "POST" }).catch(() => {});
-        if (source) source.close();
-        source = new EventSource("{{ url_for('api_oauth_status') }}");
-        source.onmessage = function (event) {
-            let data;
-            try { data = JSON.parse(event.data); } catch (e) { return; }
-
-            if (data.status === "authorized") {
-                source.close();
-                show(stepSuccess);
-                setTimeout(() => { window.location.href = "{{ url_for('index') }}"; }, 1200);
-            } else if (data.status === "error") {
-                source.close();
-                errorMsg.textContent = data.error || "Authorization failed.";
-                show(stepError);
-            } else if (data.user_code || data.verification_url) {
-                if (data.verification_url) {
-                    verifyUrl.href = data.verification_url;
-                    verifyUrl.textContent = "Open " + data.verification_url.replace(/^https?:\/\//, "");
-                }
-                if (data.user_code) userCode.textContent = data.user_code;
-                show(stepCode);
-            }
-        };
-        source.onerror = function () { /* keep connection; browser retries */ };
-    }
-
-    document.getElementById("authorize-btn").addEventListener("click", startAuth);
-    document.getElementById("retry-btn").addEventListener("click", startAuth);
+    ["dragenter", "dragover"].forEach(evt =>
+        dropzone.addEventListener(evt, e => {
+            e.preventDefault();
+            dropzone.classList.add("brand-border");
+            dropzone.classList.remove("border-slate-700");
+        })
+    );
+    ["dragleave", "drop"].forEach(evt =>
+        dropzone.addEventListener(evt, e => {
+            e.preventDefault();
+            dropzone.classList.remove("brand-border");
+            dropzone.classList.add("border-slate-700");
+        })
+    );
+    dropzone.addEventListener("drop", e => {
+        if (e.dataTransfer.files.length) {
+            input.files = e.dataTransfer.files;
+            fileName.textContent = e.dataTransfer.files[0].name;
+        }
+    });
 </script>
 {% endblock %}

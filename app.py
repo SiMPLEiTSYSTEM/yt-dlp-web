@@ -3,12 +3,10 @@ YouTube Video Downloader — Flask web app (yt-dlp backend).
 
 Features:
     * Single-download-at-a-time queue (global state guarded by a lock).
-    * YouTube authentication via the `yt-dlp-youtube-oauth2` plugin
-      (device-code OAuth2 flow). Token is cached under /config.
-    * cookies.txt fallback (secondary auth option under Settings).
+    * YouTube authentication via an uploaded cookies.txt (Netscape format).
     * Quality selector (Best / 1080p / 720p / 480p), merged to MP4.
     * Live progress via Server-Sent Events.
-    * /health + /health/json diagnostics.
+    * /health + /health/json diagnostics, incl. cookie-age expiry warning.
     * Branding is fully driven by brand/config.json — the entire codebase is
       identical between forks; only brand/config.json + brand/logo.png differ.
 
@@ -21,12 +19,11 @@ Routes:
     /get-file         serve the finished file
     /reset   (POST)   start over (deletes file + state)
     /api/status       JSON status (busy-page polling)
-    /setup            OAuth authorize page
-    /setup/authorize (POST)  trigger device-code flow
-    /api/oauth-status SSE stream of device-code + auth status
-    /settings         settings (re-auth, cookies fallback)
-    /settings/reauth (POST)  delete token -> /setup
-    /settings/cookies (POST) upload cookies.txt fallback
+    /setup   (GET)    first-run cookies upload page
+    /setup   (POST)   receive cookies.txt
+    /settings         settings (update cookies, remove & re-setup)
+    /settings/reauth (POST)  delete cookies.txt -> /setup
+    /settings/cookies (POST) upload/replace cookies.txt
     /health           diagnostics page
     /health/json      diagnostics JSON
     /brand-logo       serves brand/logo.png if present
@@ -66,18 +63,16 @@ BRAND_DIR = os.path.join(BASE_DIR, "brand")
 BRAND_CONFIG_PATH = os.path.join(BRAND_DIR, "config.json")
 BRAND_LOGO_PATH = os.path.join(BRAND_DIR, "logo.png")
 
-# Persistent config volume (OAuth token cache + cookies fallback live here).
+# Persistent config volume (cookies.txt lives here).
 CONFIG_DIR = os.environ.get("YTDLP_CONFIG_DIR", "/config")
-# The oauth2 plugin stores its token at <cachedir>/youtube-oauth2/token_data.json.
-# We point yt-dlp's cachedir at CONFIG_DIR so the token persists on the volume.
-OAUTH_TOKEN_PATH = os.path.join(CONFIG_DIR, "youtube-oauth2", "token_data.json")
 COOKIES_PATH = os.path.join(CONFIG_DIR, "cookies.txt")
 
 DOWNLOAD_DIR = "/tmp/ytdlp_downloads"
 OUTPUT_TEMPLATE = os.path.join(DOWNLOAD_DIR, "download.%(ext)s")
 
-# A short, always-available video used only to trigger the OAuth device flow.
-OAUTH_TRIGGER_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+# YouTube cookies typically expire after 2–4 weeks; warn the user once the file
+# is this many days old so they can refresh before downloads start failing.
+COOKIE_WARN_DAYS = 12
 
 START_TIME = time.time()
 
@@ -92,10 +87,12 @@ except OSError:
 # Quality -> yt-dlp format string
 # ---------------------------------------------------------------------------
 QUALITY_FORMATS = {
-    "best": "bestvideo+bestaudio/best",
-    "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-    "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-    "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
+    # Each quality level cascades: try the target height, then relax height,
+    # then fall back to any bestvideo+bestaudio, then any single best stream.
+    "best":  "bestvideo+bestaudio/best",
+    "1080p": "bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best",
+    "720p":  "bestvideo[height<=720]+bestaudio/bestvideo[height<=1080]+bestaudio/bestvideo+bestaudio/best",
+    "480p":  "bestvideo[height<=480]+bestaudio/bestvideo[height<=720]+bestaudio/bestvideo+bestaudio/best",
 }
 QUALITY_LABELS = [
     ("best", "Best Available"),
@@ -162,24 +159,6 @@ def _fresh_state():
 
 state = _fresh_state()
 
-# ---------------------------------------------------------------------------
-# OAuth device-flow state
-# ---------------------------------------------------------------------------
-oauth_lock = threading.Lock()
-
-
-def _fresh_oauth_state():
-    return {
-        "status": "idle",       # idle | pending | waiting | authorized | error
-        "verification_url": "",
-        "user_code": "",
-        "message": "",
-        "error": "",
-    }
-
-
-oauth_state = _fresh_oauth_state()
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -206,16 +185,8 @@ def clean_downloads():
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-def has_oauth_token():
-    """True if a non-empty OAuth token file exists."""
-    try:
-        return os.path.isfile(OAUTH_TOKEN_PATH) and os.path.getsize(OAUTH_TOKEN_PATH) > 0
-    except OSError:
-        return False
-
-
 def has_cookies():
-    """True if a non-empty cookies.txt fallback exists."""
+    """True if a non-empty cookies.txt exists."""
     try:
         return os.path.isfile(COOKIES_PATH) and os.path.getsize(COOKIES_PATH) > 0
     except OSError:
@@ -223,8 +194,34 @@ def has_cookies():
 
 
 def is_authorized():
-    """Authorized if we have an OAuth token or a cookies fallback."""
-    return has_oauth_token() or has_cookies()
+    """Authorized if a non-empty cookies.txt exists."""
+    return has_cookies()
+
+
+def _looks_like_cookies(text):
+    """Loose validation that an uploaded file is a Netscape cookies.txt."""
+    if not text:
+        return False
+    if "# Netscape HTTP Cookie File" in text or "# HTTP Cookie File" in text:
+        return True
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if len(line.split("\t")) >= 7:
+            return True
+    return False
+
+
+def _cookie_age_days():
+    """Age of cookies.txt in whole days, or None if absent/unknown."""
+    if not has_cookies():
+        return None
+    try:
+        age = time.time() - os.path.getmtime(COOKIES_PATH)
+        return int(age / 86400)
+    except OSError:
+        return None
 
 
 def _format_eta(seconds):
@@ -274,20 +271,16 @@ def _format_bytes(num):
 
 
 def _base_ydl_opts():
-    """Common yt-dlp options shared by downloads and the OAuth trigger."""
+    """Common yt-dlp options shared by all downloads."""
     opts = {
         "cachedir": CONFIG_DIR,
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        # Avoid the broken tv/tv_downgraded client ("page needs to be reloaded").
+        # Avoid the broken tv/tv_downgraded client.
         "extractor_args": {"youtube": {"player_client": ["default", "web_embedded"]}},
     }
-    # Prefer OAuth2 if a token exists; otherwise fall back to cookies.txt.
-    if has_oauth_token():
-        opts["username"] = "oauth2"
-        opts["password"] = ""
-    elif has_cookies():
+    if has_cookies():
         opts["cookiefile"] = COOKIES_PATH
     return opts
 
@@ -302,13 +295,13 @@ def friendly_error(raw):
             "Try a lower quality or 'Best Available'."
         )
     if "page needs to be reloaded" in low:
-        return "YouTube session issue. Try re-authorizing in Settings."
+        return "YouTube session issue. Upload fresh cookies.txt in Settings."
     if "private video" in low:
         return "This video is private and cannot be downloaded."
     if "video unavailable" in low:
         return "This video is unavailable in your region or has been removed."
     if "sign in" in low or "requires authentication" in low or "login required" in low:
-        return "This video requires sign-in. Re-authorize in Settings."
+        return "This video requires sign-in. Upload fresh cookies.txt in Settings."
     return text or "Download failed."
 
 
@@ -408,91 +401,6 @@ def download_worker(url, quality):
         with state_lock:
             state["status"] = "error"
             state["error"] = friendly_error(str(exc))
-
-
-# ---------------------------------------------------------------------------
-# OAuth device-code flow
-# ---------------------------------------------------------------------------
-class OAuthLogger:
-    """Captures yt-dlp/plugin log output to extract the device code + URL."""
-
-    def _capture(self, msg):
-        text = _strip_ansi(msg)
-        if not text:
-            return
-        url = None
-        code = None
-
-        m_url = re.search(r"https?://\S*(?:google|youtube)\.com/\S*", text)
-        if m_url:
-            url = m_url.group(0).rstrip(".,)")
-
-        m_code = re.search(r"enter code[:\s]+([A-Z0-9\-]{4,})", text, re.IGNORECASE)
-        if not m_code:
-            m_code = re.search(r"\bcode[:\s]+([A-Z0-9]{4,}-?[A-Z0-9]*)", text, re.IGNORECASE)
-        if m_code:
-            code = m_code.group(1).strip()
-
-        if url or code:
-            with oauth_lock:
-                if url:
-                    oauth_state["verification_url"] = url
-                if code:
-                    oauth_state["user_code"] = code
-                oauth_state["status"] = "waiting"
-                oauth_state["message"] = text
-
-    def debug(self, msg):
-        self._capture(msg)
-
-    def info(self, msg):
-        self._capture(msg)
-
-    def warning(self, msg):
-        self._capture(msg)
-
-    def error(self, msg):
-        self._capture(msg)
-
-
-def authorize_worker():
-    """Trigger the device-code OAuth flow by probing a video with oauth2 user."""
-    ydl_opts = {
-        "cachedir": CONFIG_DIR,
-        "username": "oauth2",
-        "password": "",
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "logger": OAuthLogger(),
-        "extractor_args": {"youtube": {"player_client": ["default", "web_embedded"]}},
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(OAUTH_TRIGGER_URL, download=False)
-        # If extract_info returned and a token now exists, we're authorized.
-        if has_oauth_token():
-            with oauth_lock:
-                oauth_state["status"] = "authorized"
-                oauth_state["message"] = "Authorized."
-        else:
-            with oauth_lock:
-                # Some plugin versions complete auth but we re-verify once.
-                oauth_state["status"] = "authorized" if is_authorized() else "error"
-                if oauth_state["status"] == "error":
-                    oauth_state["error"] = (
-                        "Authorization finished but no token was saved. "
-                        "Please try again."
-                    )
-    except Exception as exc:  # noqa: BLE001
-        if has_oauth_token():
-            with oauth_lock:
-                oauth_state["status"] = "authorized"
-                oauth_state["message"] = "Authorized."
-        else:
-            with oauth_lock:
-                oauth_state["status"] = "error"
-                oauth_state["error"] = _strip_ansi(str(exc)) or "Authorization failed."
 
 
 # ---------------------------------------------------------------------------
@@ -636,42 +544,35 @@ def api_status():
 
 
 # ---------------------------------------------------------------------------
-# Routes — OAuth setup
+# Routes — setup (first-run cookies upload)
 # ---------------------------------------------------------------------------
-@app.route("/setup")
+@app.route("/setup", methods=["GET"])
 def setup():
     if is_authorized():
         return redirect(url_for("index"))
-    return render_template("setup.html")
+    return render_template("setup.html", error=None)
 
 
-@app.route("/setup/authorize", methods=["POST"])
-def setup_authorize():
-    with oauth_lock:
-        if oauth_state["status"] in ("pending", "waiting"):
-            # Already in progress.
-            return ("", 204)
-        oauth_state.update(_fresh_oauth_state())
-        oauth_state["status"] = "pending"
-    threading.Thread(target=authorize_worker, daemon=True).start()
-    return ("", 204)
-
-
-@app.route("/api/oauth-status")
-def api_oauth_status():
-    def generate():
-        while True:
-            with oauth_lock:
-                payload = dict(oauth_state)
-            # If a token appeared out of band, report authorized.
-            if payload["status"] != "authorized" and has_oauth_token():
-                payload["status"] = "authorized"
-            yield f"data: {json.dumps(payload)}\n\n"
-            if payload["status"] in ("authorized", "error"):
-                break
-            time.sleep(1.0)
-
-    return Response(generate(), mimetype="text/event-stream")
+@app.route("/setup", methods=["POST"])
+def setup_upload():
+    """Receive cookies.txt on the setup page (first-run flow)."""
+    file = request.files.get("cookies")
+    if not file or not file.filename:
+        return render_template("setup.html", error="Please choose a cookies.txt file.")
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        raw = file.read()
+        text = raw.decode("utf-8", errors="replace")
+        if not _looks_like_cookies(text):
+            return render_template(
+                "setup.html",
+                error="That doesn't look like a Netscape cookies.txt. Export it again using a browser extension.",
+            )
+        with open(COOKIES_PATH, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+    except OSError as exc:
+        return render_template("setup.html", error=f"Could not save: {exc}. Check that the /config volume is writable.")
+    return redirect(url_for("index"))
 
 
 # ---------------------------------------------------------------------------
@@ -679,56 +580,74 @@ def api_oauth_status():
 # ---------------------------------------------------------------------------
 @app.route("/settings")
 def settings():
+    cookie_age_days = None
+    cookie_warning = False
+    if has_cookies():
+        try:
+            age = time.time() - os.path.getmtime(COOKIES_PATH)
+            cookie_age_days = int(age / 86400)
+            cookie_warning = cookie_age_days >= COOKIE_WARN_DAYS  # warn after 12 days
+        except OSError:
+            pass
     return render_template(
         "settings.html",
-        has_token=has_oauth_token(),
         has_cookies=has_cookies(),
         authorized=is_authorized(),
+        cookie_age_days=cookie_age_days,
+        cookie_warning=cookie_warning,
     )
 
 
 @app.route("/settings/reauth", methods=["POST"])
 def settings_reauth():
+    """Delete cookies.txt so the user can upload fresh ones."""
     try:
-        if os.path.isfile(OAUTH_TOKEN_PATH):
-            os.remove(OAUTH_TOKEN_PATH)
+        if os.path.isfile(COOKIES_PATH):
+            os.remove(COOKIES_PATH)
     except OSError:
         pass
-    with oauth_lock:
-        oauth_state.update(_fresh_oauth_state())
     return redirect(url_for("setup"))
+
+
+def _render_settings(**extra):
+    """Render settings.html with freshly-computed cookie age context."""
+    cookie_age_days = None
+    cookie_warning = False
+    if has_cookies():
+        try:
+            age = time.time() - os.path.getmtime(COOKIES_PATH)
+            cookie_age_days = int(age / 86400)
+            cookie_warning = cookie_age_days >= COOKIE_WARN_DAYS
+        except OSError:
+            pass
+    ctx = {
+        "has_cookies": has_cookies(),
+        "authorized": is_authorized(),
+        "cookie_age_days": cookie_age_days,
+        "cookie_warning": cookie_warning,
+    }
+    ctx.update(extra)
+    return render_template("settings.html", **ctx)
 
 
 @app.route("/settings/cookies", methods=["POST"])
 def settings_cookies():
     file = request.files.get("cookies")
     if not file or not file.filename:
-        return render_template(
-            "settings.html",
-            has_token=has_oauth_token(),
-            has_cookies=has_cookies(),
-            authorized=is_authorized(),
-            error="Please choose a cookies.txt file to upload.",
-        )
+        return _render_settings(error="Please choose a cookies.txt file to upload.")
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        file.save(COOKIES_PATH)
-        msg = "cookies.txt uploaded successfully."
+        raw = file.read()
+        text = raw.decode("utf-8", errors="replace")
+        if not _looks_like_cookies(text):
+            return _render_settings(
+                error="That doesn't look like a Netscape cookies.txt. Export it again using a browser extension.",
+            )
+        with open(COOKIES_PATH, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
     except OSError as exc:
-        return render_template(
-            "settings.html",
-            has_token=has_oauth_token(),
-            has_cookies=has_cookies(),
-            authorized=is_authorized(),
-            error=f"Could not save cookies file: {exc}",
-        )
-    return render_template(
-        "settings.html",
-        has_token=has_oauth_token(),
-        has_cookies=has_cookies(),
-        authorized=is_authorized(),
-        message=msg,
-    )
+        return _render_settings(error=f"Could not save cookies file: {exc}")
+    return _render_settings(message="cookies.txt uploaded successfully.")
 
 
 # ---------------------------------------------------------------------------
@@ -759,16 +678,18 @@ def _collect_health():
     except OSError:
         disk_free = disk_total = "unknown"
 
-    token_exists = has_oauth_token()
-    token_mtime = None
-    if token_exists:
+    cookies_present = has_cookies()
+    cookie_mtime = None
+    cookie_age_days = None
+    cookie_warning = False
+    if cookies_present:
         try:
-            token_mtime = time.strftime(
-                "%Y-%m-%d %H:%M:%S UTC",
-                time.gmtime(os.path.getmtime(OAUTH_TOKEN_PATH)),
-            )
+            mtime = os.path.getmtime(COOKIES_PATH)
+            cookie_mtime = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(mtime))
+            cookie_age_days = int((time.time() - mtime) / 86400)
+            cookie_warning = cookie_age_days >= COOKIE_WARN_DAYS
         except OSError:
-            token_mtime = "unknown"
+            cookie_mtime = "unknown"
 
     with state_lock:
         last_title = state.get("last_title") or ""
@@ -781,22 +702,18 @@ def _collect_health():
     else:
         last_download = "None yet"
 
-    if token_exists:
-        auth_method = "Authorized via OAuth2"
-    elif has_cookies():
-        auth_method = "Authorized via cookies.txt"
-    else:
-        auth_method = "Not authorized"
+    auth_method = "Authorized via cookies.txt" if cookies_present else "Not authorized"
 
     return {
         "authorized": is_authorized(),
         "auth_method": auth_method,
-        "oauth_token_present": token_exists,
-        "cookies_present": has_cookies(),
+        "cookies_present": cookies_present,
+        "cookie_path": COOKIES_PATH,
+        "cookie_mtime": cookie_mtime or "n/a",
+        "cookie_age_days": cookie_age_days,
+        "cookie_warning": cookie_warning,
         "ytdlp_version": getattr(yt_dlp.version, "__version__", "unknown"),
         "ffmpeg": _ffmpeg_version(),
-        "token_path": OAUTH_TOKEN_PATH,
-        "token_modified": token_mtime or "n/a",
         "disk_free": disk_free,
         "disk_total": disk_total,
         "python_version": sys.version.split()[0],
