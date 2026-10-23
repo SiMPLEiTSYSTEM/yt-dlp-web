@@ -1,4 +1,8 @@
-flask>=3.0.0
-gunicorn>=23.0.0
+# Pinned to latest stable as of 2026-10-23.
+# yt-dlp is intentionally unpinned — it releases frequently to keep pace with
+# YouTube. Pinning it means missing critical fixes; run `make rebuild` after
+# any yt-dlp update to pull the newest version into the image.
+flask==3.1.3
+gunicorn==26.2.0
 yt-dlp
-yt-dlp-youtube-oauth2
+yt-dlp-youtube-oauth2==1.0.10

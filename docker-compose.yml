@@ -1,16 +1,18 @@
 # ---------------------------------------------------------------------------
-# Usage:
-#   make up        build & start (http://<host>:5000)
-#   make logs      follow logs
-#   make health    print /health/json
-#   make down      stop
+# No source code needed — just pull and run:
+#   docker compose pull && docker compose up -d
 #
-# First run: open the app and complete the one-time YouTube authorization.
-# The OAuth token persists in the `ytdlp_config` volume; downloaded files
-# live only temporarily and are removed when the user clicks "Start Over".
+# Build from source instead:
+#   docker compose up -d --build
+#
+# Makefile shortcuts:  make up | make rebuild | make logs | make health | make update | make down
+#
+# First run: open http://<host>:5000 and complete the one-time YouTube
+# authorization. The OAuth token persists in the ytdlp_config volume.
 # ---------------------------------------------------------------------------
 services:
   app:
+    image: ghcr.io/simplesitsystem/yt-dlp-web:latest
     build: .
     restart: unless-stopped
     ports:
