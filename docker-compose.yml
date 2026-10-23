@@ -12,7 +12,7 @@
 # ---------------------------------------------------------------------------
 services:
   app:
-    image: ghcr.io/simplesitsystem/yt-dlp-web:latest
+    image: ghcr.io/simpleitsystem/yt-dlp-web:latest
     build: .
     restart: unless-stopped
     ports:
