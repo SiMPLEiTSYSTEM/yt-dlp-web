@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Health · {{ brand.name }}{% endblock %}
+
+{% block content %}
+<div class="w-full">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-semibold">System Health</h2>
+        <a href="{{ url_for('health_json') }}" class="text-xs brand-text hover:underline">JSON</a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Auth status -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Authentication</div>
+            {% if health.authorized %}
+            <div class="flex items-center gap-2 text-emerald-400 font-semibold">
+                <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>{{ health.auth_method }}
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 text-red-400 font-semibold">
+                <span class="h-2.5 w-2.5 rounded-full bg-red-400"></span>{{ health.auth_method }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- yt-dlp version -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">yt-dlp version</div>
+            <div class="font-mono text-slate-200">{{ health.ytdlp_version }}</div>
+        </div>
+
+        <!-- ffmpeg -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">ffmpeg</div>
+            {% if health.ffmpeg == 'not found' %}
+            <div class="text-red-400 font-medium">not found</div>
+            {% else %}
+            <div class="font-mono text-slate-200 text-sm break-all">{{ health.ffmpeg }}</div>
+            {% endif %}
+        </div>
+
+        <!-- Token info -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">OAuth token</div>
+            <div class="text-sm">
+                {% if health.oauth_token_present %}
+                <span class="text-emerald-400">Present</span>
+                <div class="text-slate-500 mt-1">Updated: {{ health.token_modified }}</div>
+                {% else %}
+                <span class="text-slate-400">None</span>
+                {% endif %}
+                <div class="text-slate-600 text-xs mt-2 font-mono break-all">{{ health.token_path }}</div>
+            </div>
+        </div>
+
+        <!-- Disk -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Disk (downloads)</div>
+            <div class="text-slate-200">{{ health.disk_free }} free</div>
+            <div class="text-slate-500 text-xs mt-1">of {{ health.disk_total }}</div>
+        </div>
+
+        <!-- System -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">System</div>
+            <div class="text-slate-200 text-sm">Python {{ health.python_version }}</div>
+            <div class="text-slate-500 text-xs mt-1">Uptime: {{ health.uptime_human }}</div>
+        </div>
+
+        <!-- Last download -->
+        <div class="rounded-xl bg-slate-900/70 border border-slate-800 p-5 sm:col-span-2">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Last download</div>
+            <div class="text-slate-200 text-sm break-all">{{ health.last_download }}</div>
+        </div>
+    </div>
+
+    <div class="mt-6 flex flex-wrap gap-3">
+        <form action="{{ url_for('settings_reauth') }}" method="post">
+            <button type="submit" class="rounded-lg brand-btn px-4 py-2 text-sm font-semibold text-white transition">Re-authorize</button>
+        </form>
+        <a href="{{ url_for('settings') }}" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-600">Upload cookies</a>
+        <a href="{{ url_for('index') }}" class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-700">Back home</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Settings · {{ brand.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl p-8">
+        <h2 class="text-2xl font-semibold mb-4">Settings</h2>
+
+        {% if message %}
+        <div class="mb-5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{{ message }}</div>
+        {% endif %}
+        {% if error %}
+        <div class="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">{{ error }}</div>
+        {% endif %}
+
+        <!-- Auth status -->
+        <div class="rounded-lg bg-slate-800/60 px-4 py-4 mb-6">
+            <div class="text-sm text-slate-400 mb-1">Authentication status</div>
+            {% if has_token %}
+            <div class="flex items-center gap-2 text-emerald-400 font-medium">
+                <span class="h-2.5 w-2.5 rounded-full bg-emerald-400"></span> Authorized via OAuth2
+            </div>
+            {% elif has_cookies %}
+            <div class="flex items-center gap-2 text-amber-400 font-medium">
+                <span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span> Authorized via cookies.txt (fallback)
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 text-red-400 font-medium">
+                <span class="h-2.5 w-2.5 rounded-full bg-red-400"></span> Not authorized
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Re-authorize -->
+        <form action="{{ url_for('settings_reauth') }}" method="post" class="mb-6">
+            <button type="submit" class="w-full rounded-lg brand-btn px-4 py-3 font-semibold text-white transition">
+                Re-authorize YouTube
+            </button>
+            <p class="mt-2 text-xs text-slate-500">
+                Deletes the stored OAuth token and restarts the authorization flow.
+                Use this if downloads start failing with sign-in errors.
+            </p>
+        </form>
+
+        <!-- Cookies fallback (advanced) -->
+        <details class="rounded-lg border border-slate-800 bg-slate-800/40 px-4 py-3">
+            <summary class="cursor-pointer text-sm font-medium text-slate-300">
+                Advanced: upload cookies.txt as a fallback
+            </summary>
+            <div class="mt-4">
+                <p class="text-xs text-slate-500 mb-3">
+                    If OAuth2 doesn't work for you, you can upload a Netscape-format
+                    <code>cookies.txt</code> exported from your browser. This is used
+                    only if no OAuth token is present.
+                </p>
+                <form action="{{ url_for('settings_cookies') }}" method="post" enctype="multipart/form-data" class="space-y-3">
+                    <input type="file" name="cookies" accept=".txt"
+                           class="block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-slate-100" />
+                    <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-600">
+                        Upload cookies.txt
+                    </button>
+                </form>
+                {% if has_cookies %}
+                <p class="mt-3 text-xs text-emerald-400">A cookies.txt file is currently stored.</p>
+                {% endif %}
+            </div>
+        </details>
+    </div>
+
+    <div class="text-center">
+        <a href="{{ url_for('health') }}" class="text-sm brand-text hover:underline">View diagnostics / health page →</a>
+    </div>
+</div>
+{% endblock %}

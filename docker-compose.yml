@@ -1,30 +1,24 @@
 # ---------------------------------------------------------------------------
-# YT-DLP Downloader — docker-compose
-#
 # Usage:
-#   1. Build and start:   docker compose up -d
-#   2. Open in a browser: http://<host-ip>:8080
+#   make up        build & start (http://<host>:5000)
+#   make logs      follow logs
+#   make health    print /health/json
+#   make down      stop
 #
-# The app runs one download at a time. Downloaded files live only
-# temporarily inside the container (/tmp/ytdlp_downloads) and are removed
-# when the user clicks "Start Over".
-#
-# COOKIES ARE REQUIRED. On first launch the web UI shows an upload page —
-# just upload a YouTube cookies.txt (Netscape format) through the browser.
-# It is stored in the "ytdlp_config" volume below and persists across
-# restarts, so you only do this once (until the cookies expire).
+# First run: open the app and complete the one-time YouTube authorization.
+# The OAuth token persists in the `ytdlp_config` volume; downloaded files
+# live only temporarily and are removed when the user clicks "Start Over".
 # ---------------------------------------------------------------------------
 services:
-  yt-dlp-web:
-    image: ghcr.io/simpleitsystem/yt-dlp-web
-    container_name: yt-dlp-web
-    ports:
-      # host 8080 -> container 5000
-      - "8080:5000"
+  app:
+    build: .
     restart: unless-stopped
+    ports:
+      - "5000:5000"
     volumes:
-      # Temporary download directory (files deleted on "Start Over").
-      - ./ytdlp_downloads:/tmp/ytdlp_downloads
-      # Persistent config volume that holds the uploaded cookies.txt.
-      # Must be writable (do NOT add :ro) so the upload page can save it.
-      - ./ytdlp_config:/config
+      - ytdlp_config:/config
+      - ytdlp_downloads:/tmp/ytdlp_downloads
+
+volumes:
+  ytdlp_config:
+  ytdlp_downloads:

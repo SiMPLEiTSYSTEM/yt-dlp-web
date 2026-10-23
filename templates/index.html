@@ -1,11 +1,10 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-8">
-    <h2 class="text-2xl font-semibold mb-1">Download a video</h2>
+<div class="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl p-8">
+    <h2 class="text-2xl font-semibold mb-1">{{ brand.tagline }}</h2>
     <p class="text-slate-400 text-sm mb-6">
-        Paste a video URL below. It will be downloaded in the best quality up to
-        1080p and merged into an MP4 file.
+        Paste a video URL, choose a quality, and download it as an MP4.
     </p>
 
     {% if error %}
@@ -18,27 +17,30 @@
         <div>
             <label for="url" class="block text-sm font-medium text-slate-300 mb-2">Video URL</label>
             <input
-                id="url"
-                name="url"
-                type="url"
-                required
-                autofocus
+                id="url" name="url" type="url" required autofocus
                 placeholder="https://www.youtube.com/watch?v=..."
-                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 placeholder-slate-500 brand-ring"
             />
         </div>
+
+        <div>
+            <label for="quality" class="block text-sm font-medium text-slate-300 mb-2">Quality</label>
+            <select
+                id="quality" name="quality"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-100 brand-ring"
+            >
+                {% for value, label in qualities %}
+                <option value="{{ value }}" {% if value == 'best' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
         <button
             type="submit"
-            class="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            class="w-full rounded-lg brand-btn px-4 py-3 font-semibold text-white transition"
         >
             Start Download
         </button>
     </form>
-
-    <div class="mt-6 border-t border-slate-800 pt-4 text-center">
-        <a href="{{ url_for('setup') }}" class="text-xs text-slate-500 hover:text-slate-300">
-            Update YouTube cookies
-        </a>
-    </div>
 </div>
 {% endblock %}

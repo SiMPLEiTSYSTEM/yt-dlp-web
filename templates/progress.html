@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Downloading · YT-DLP Downloader{% endblock %}
+{% block title %}Downloading · {{ brand.name }}{% endblock %}
 
 {% block content %}
-<div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-8">
+<div class="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl p-8">
     <h2 class="text-2xl font-semibold mb-1">Downloading…</h2>
     <p id="video-title" class="text-slate-400 text-sm mb-6 truncate">
         {{ title or "Fetching video information…" }}
@@ -11,15 +11,11 @@
 
     <div class="mb-2 flex items-center justify-between text-sm">
         <span class="font-medium text-slate-300">Progress</span>
-        <span id="percent" class="font-mono text-indigo-300">0%</span>
+        <span id="percent" class="font-mono brand-text">0%</span>
     </div>
 
     <div class="h-4 w-full overflow-hidden rounded-full bg-slate-800">
-        <div
-            id="bar"
-            class="progress-striped h-full rounded-full bg-indigo-600 transition-all duration-300 ease-out"
-            style="width: 0%;"
-        ></div>
+        <div id="bar" class="progress-striped brand-bg h-full rounded-full transition-all duration-300 ease-out" style="width: 0%;"></div>
     </div>
 
     <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
@@ -50,15 +46,9 @@
 
     source.onmessage = function (event) {
         let data;
-        try {
-            data = JSON.parse(event.data);
-        } catch (e) {
-            return;
-        }
+        try { data = JSON.parse(event.data); } catch (e) { return; }
 
-        if (data.title) {
-            titleEl.textContent = data.title;
-        }
+        if (data.title) titleEl.textContent = data.title;
 
         const pct = Math.max(0, Math.min(100, Number(data.progress) || 0));
         bar.style.width = pct + "%";
@@ -72,8 +62,7 @@
             window.location.href = "{{ url_for('download') }}";
         } else if (data.status === "error") {
             source.close();
-            bar.classList.remove("progress-striped");
-            bar.classList.remove("bg-indigo-600");
+            bar.classList.remove("progress-striped", "brand-bg");
             bar.classList.add("bg-red-600");
             errorBox.textContent = data.error || "Download failed.";
             errorBox.classList.remove("hidden");
@@ -84,7 +73,6 @@
     };
 
     source.onerror = function () {
-        // If the stream drops, fall back to polling the status endpoint.
         source.close();
         const poll = setInterval(async function () {
             try {
@@ -101,9 +89,7 @@
                     errorBox.textContent = data.error || "Download failed.";
                     errorBox.classList.remove("hidden");
                 }
-            } catch (e) {
-                /* keep polling */
-            }
+            } catch (e) { /* keep polling */ }
         }, 1500);
     };
 </script>

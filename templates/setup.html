@@ -1,68 +1,130 @@
 {% extends "base.html" %}
 
-{% block title %}Setup · Upload cookies{% endblock %}
+{% block title %}Authorize · {{ brand.name }}{% endblock %}
 
 {% block content %}
-<div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-8">
-    <h2 class="text-2xl font-semibold mb-1">Upload YouTube cookies</h2>
-    <p class="text-slate-400 text-sm mb-6">
-        A <code class="text-slate-300">cookies.txt</code> file is required before you can
-        download. It lets the downloader authenticate with YouTube so full-quality
-        (up to 1080p) formats are available.
-    </p>
+<div class="bg-slate-900/70 border border-slate-800 rounded-2xl shadow-xl p-8 text-center">
 
-    {% if error %}
-    <div class="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-        {{ error }}
-    </div>
-    {% endif %}
-
-    {% if have_cookies %}
-    <div class="mb-5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-        A cookies file is already loaded. Uploading a new one will replace it.
-    </div>
-    {% endif %}
-
-    <form action="{{ url_for('setup_upload') }}" method="post" enctype="multipart/form-data" class="space-y-4">
-        <div>
-            <label for="cookies" class="block text-sm font-medium text-slate-300 mb-2">
-                cookies.txt file
-            </label>
-            <input
-                id="cookies"
-                name="cookies"
-                type="file"
-                accept=".txt,text/plain"
-                required
-                class="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-indigo-500 cursor-pointer rounded-lg border border-slate-700 bg-slate-800 p-2"
-            />
-        </div>
+    <!-- Initial state -->
+    <div id="step-start">
+        <div class="mx-auto mb-5 h-14 w-14 rounded-full brand-bg flex items-center justify-center text-2xl text-white">▶</div>
+        <h2 class="text-2xl font-semibold mb-2">Authorize with YouTube</h2>
+        <p class="text-slate-400 text-sm mb-6">
+            This app uses YouTube OAuth2 to download videos reliably — no browser
+            extension needed. You only need to do this once; the token refreshes
+            automatically.
+        </p>
         <button
-            type="submit"
-            class="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            id="authorize-btn"
+            class="inline-block rounded-lg brand-btn px-6 py-3 font-semibold text-white transition"
         >
-            Upload &amp; Continue
+            Authorize with YouTube
         </button>
-    </form>
-
-    {% if have_cookies %}
-    <div class="mt-4 text-center">
-        <a href="{{ url_for('index') }}" class="text-sm text-slate-400 hover:text-slate-200">← Back to downloader</a>
     </div>
-    {% endif %}
 
-    <div class="mt-8 border-t border-slate-800 pt-6">
-        <h3 class="text-sm font-semibold text-slate-300 mb-2">How to get cookies.txt</h3>
-        <ol class="list-decimal list-inside space-y-1 text-xs text-slate-400">
-            <li>Install a browser extension such as <span class="text-slate-300">“Get cookies.txt LOCALLY”</span> (Chrome/Firefox).</li>
-            <li>Log in to <span class="text-slate-300">youtube.com</span> in that browser.</li>
-            <li>Open the extension while on YouTube and export/download <code class="text-slate-300">cookies.txt</code>.</li>
-            <li>Upload that file here.</li>
-        </ol>
-        <p class="mt-3 text-xs text-slate-500">
-            Tip: use a private/incognito window logged into a throwaway account, export the
-            cookies, then close the window so the session stays valid for the server.
+    <!-- Waiting / code state -->
+    <div id="step-code" class="hidden">
+        <h2 class="text-2xl font-semibold mb-2">Complete authorization</h2>
+        <p class="text-slate-400 text-sm mb-6">
+            On any device, open the link below and enter this code:
+        </p>
+
+        <a id="verify-url" href="#" target="_blank" rel="noopener"
+           class="inline-block mb-5 rounded-lg brand-btn px-6 py-3 font-semibold text-white transition">
+            Open google.com/device
+        </a>
+
+        <div class="mb-6">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Your code</div>
+            <div id="user-code" class="font-mono text-3xl font-bold brand-text tracking-widest">—</div>
+        </div>
+
+        <div class="flex items-center justify-center gap-3 text-slate-400 text-sm">
+            <div class="h-5 w-5 rounded-full border-2 border-slate-600 brand-border border-t-transparent animate-spin"></div>
+            Waiting for you to complete authorization on YouTube…
+        </div>
+    </div>
+
+    <!-- Spinner (before code arrives) -->
+    <div id="step-loading" class="hidden">
+        <div class="mx-auto mb-5 h-14 w-14 rounded-full border-4 border-slate-700 brand-border border-t-transparent animate-spin"></div>
+        <h2 class="text-xl font-semibold mb-2">Starting authorization…</h2>
+        <p class="text-slate-400 text-sm">Requesting a device code from YouTube.</p>
+    </div>
+
+    <!-- Success -->
+    <div id="step-success" class="hidden">
+        <div class="mx-auto mb-5 h-14 w-14 rounded-full bg-emerald-500/15 flex items-center justify-center">
+            <svg class="h-7 w-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+        </div>
+        <h2 class="text-2xl font-semibold mb-1">Authorized!</h2>
+        <p class="text-slate-400 text-sm">Redirecting…</p>
+    </div>
+
+    <!-- Error -->
+    <div id="step-error" class="hidden">
+        <div class="mb-5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300" id="error-msg"></div>
+        <button id="retry-btn" class="rounded-lg brand-btn px-6 py-3 font-semibold text-white transition">
+            Try Again
+        </button>
+        <p class="mt-4 text-xs text-slate-500">
+            Having trouble? You can upload a cookies.txt file as a fallback in
+            <a href="{{ url_for('settings') }}" class="brand-text hover:underline">Settings</a>.
         </p>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const stepStart = document.getElementById("step-start");
+    const stepLoading = document.getElementById("step-loading");
+    const stepCode = document.getElementById("step-code");
+    const stepSuccess = document.getElementById("step-success");
+    const stepError = document.getElementById("step-error");
+    const verifyUrl = document.getElementById("verify-url");
+    const userCode = document.getElementById("user-code");
+    const errorMsg = document.getElementById("error-msg");
+
+    function show(el) {
+        [stepStart, stepLoading, stepCode, stepSuccess, stepError].forEach(s => s.classList.add("hidden"));
+        el.classList.remove("hidden");
+    }
+
+    let source = null;
+
+    function startAuth() {
+        show(stepLoading);
+        fetch("{{ url_for('setup_authorize') }}", { method: "POST" }).catch(() => {});
+        if (source) source.close();
+        source = new EventSource("{{ url_for('api_oauth_status') }}");
+        source.onmessage = function (event) {
+            let data;
+            try { data = JSON.parse(event.data); } catch (e) { return; }
+
+            if (data.status === "authorized") {
+                source.close();
+                show(stepSuccess);
+                setTimeout(() => { window.location.href = "{{ url_for('index') }}"; }, 1200);
+            } else if (data.status === "error") {
+                source.close();
+                errorMsg.textContent = data.error || "Authorization failed.";
+                show(stepError);
+            } else if (data.user_code || data.verification_url) {
+                if (data.verification_url) {
+                    verifyUrl.href = data.verification_url;
+                    verifyUrl.textContent = "Open " + data.verification_url.replace(/^https?:\/\//, "");
+                }
+                if (data.user_code) userCode.textContent = data.user_code;
+                show(stepCode);
+            }
+        };
+        source.onerror = function () { /* keep connection; browser retries */ };
+    }
+
+    document.getElementById("authorize-btn").addEventListener("click", startAuth);
+    document.getElementById("retry-btn").addEventListener("click", startAuth);
+</script>
 {% endblock %}
